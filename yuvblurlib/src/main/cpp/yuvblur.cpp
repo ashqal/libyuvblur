@@ -1,140 +1,143 @@
 #include <jni.h>
 #include <string>
 
-static void superFastBlur(unsigned char *pix, int w, int h, int blurRadius) {
-    int centx = w >> 1;
-    int centy = h >> 1;
-    int circleRadius = 0;
-    int smoothRadius = 5;
-    const int byteCount = 1;
-    int radius = (blurRadius / 10) * 2;
-    int minW_h = (smoothRadius + circleRadius);//min(w,h)/2;
-    //bool ischange = false;
-    int div;
-    int wm, hm, wh;
-    int *vMIN, *vMAX;
-    unsigned char *r, *g, *b, *dv;
+static void superFastBlur2(unsigned char *pixR, unsigned char *pixG, unsigned char *pixB, int width, int height, int radius) {
+    if (radius<1) return;
+
+    int wm = width - 1;
+    int hm = height - 1;
+    int wh = width * height;
+    int div = radius + radius + 1;
+
+    unsigned char *r = new unsigned char[wh];
+    unsigned char *g = new unsigned char[wh];
+    unsigned char *b = new unsigned char[wh];
+
     int rsum, gsum, bsum, x, y, i, p, p1, p2, yp, yi, yw;
 
-    int posx = 0;
-    int posy = 0;
-    if (radius < 1) return;
+    int *vMIN = new int[std::min(width,height)];
+    int *vMAX = new int[std::max(width,height)];
 
-    wm = w - 1;
-    hm = h - 1;
-    wh = w * h;
-    div = radius + radius + 1;
-    vMIN = (int *) malloc(sizeof(int) * std::max(w, h));
-    vMAX = (int *) malloc(sizeof(int) * std::max(w, h));
-    //r = (unsigned char *)malloc(sizeof(unsigned char) * wh);
-    //g = (unsigned char *)malloc(sizeof(unsigned char) * wh);
-    b = (unsigned char *) malloc(sizeof(unsigned char) * wh);
-    dv = (unsigned char *) malloc(sizeof(unsigned char) * 256 * div);
-
-    for (i = 0; i < 256 * div; i++) {
-        dv[i] = (i / div);
-    }
+    unsigned char *dv = new unsigned char[256*div];
+    for (i = 0; i < 256*div; i++) dv[i] = (i/div);
 
     yw = yi = 0;
 
-    for (y = 0; y < h; y++) {
+    for (y = 0; y < height; y++) {
         rsum = gsum = bsum = 0;
         for (i = -radius; i <= radius; i++) {
-            p = (yi + std::min(wm, std::max(i, 0))) * byteCount;
-            bsum += pix[p];
-            //gsum += pix[p + 1];
-            //rsum += pix[p + 2];
+            p = (yi + std::min(wm, std::max(i,0)));
+            rsum += pixR[p];
+            gsum += pixG[p];
+            bsum += pixB[p];
         }
-        for (x = 0; x < w; x++) {
-            //r[yi] = dv[rsum];
-            //g[yi] = dv[gsum];
+        for (x = 0; x < width; x++) {
+            r[yi] = dv[rsum];
+            g[yi] = dv[gsum];
             b[yi] = dv[bsum];
 
             if (y == 0) {
                 vMIN[x] = std::min(x + radius + 1, wm);
                 vMAX[x] = std::max(x - radius, 0);
             }
-            p1 = (yw + vMIN[x]) * byteCount;
-            p2 = (yw + vMAX[x]) * byteCount;
+            p1 = (yw + vMIN[x]);
+            p2 = (yw + vMAX[x]);
 
-            bsum += pix[p1] - pix[p2];//上一个点后移动１位数
-            //gsum += pix[p1 + 1] - pix[p2 + 1];
-            //rsum += pix[p1 + 2] - pix[p2 + 2];
+            rsum += pixR[p1] - pixR[p2];
+            gsum += pixG[p1] - pixG[p2];
+            bsum += pixB[p1] - pixB[p2];
 
             yi++;
         }
-        yw += w;
+        yw += width;
     }
 
-    for (x = 0; x < w; x++) {
-        //跳过非模糊区域 即圆内
-        posx = x;
-
+    for (x = 0; x < width; x++) {
         rsum = gsum = bsum = 0;
-        yp = -radius * w;
+        yp = -radius * width;
         for (i = -radius; i <= radius; i++) {
             yi = std::max(0, yp) + x;
-            //rsum += r[yi];
-            //gsum += g[yi];
+            rsum += r[yi];
+            gsum += g[yi];
             bsum += b[yi];
-            yp += w;
+            yp += width;
         }
+
         yi = x;
-        for (y = 0; y < h; y++) {
-            //跳过非模糊区域 即圆内
-            //posx = x;
-            posy = y;//h-y;
-            if ((posx - centx) * (posx - centx) + (posy - centy) * (posy - centy) <
-                circleRadius * circleRadius) {
-                //yi += w;
-                //continue;
-            } else {
 
-                pix[yi * byteCount] = dv[bsum];
-                //pix[yi * byteCount + 1] = dv[gsum];
-                //pix[yi * byteCount + 2] = dv[rsum];
-            }
-
+        for (y = 0; y < height; y++) {
+            pixR[yi] = dv[rsum];
+            pixG[yi] = dv[gsum];
+            pixB[yi] = dv[bsum];
             if (x == 0) {
-                vMIN[y] = std::min(y + radius + 1, hm) * w;
-                vMAX[y] = std::max(y - radius, 0) * w;
+                vMIN[y] = std::min(y + radius + 1, hm) * width;
+                vMAX[y] = std::max(y - radius, 0) * width;
             }
-
             p1 = x + vMIN[y];
             p2 = x + vMAX[y];
 
-            //rsum += r[p1] - r[p2];
-            //gsum += g[p1] - g[p2];
+            rsum += r[p1] - r[p2];
+            gsum += g[p1] - g[p2];
             bsum += b[p1] - b[p2];
 
-            yi += w;
+            yi += width;
         }
     }
 
-    //free(r);
-    //free(g);
-    free(b);
+    delete r;
+    delete g;
+    delete b;
 
-    free(vMIN);
-    free(vMAX);
-    free(dv);
+    delete vMIN;
+    delete vMAX;
+    delete dv;
 }
 
 extern "C"
 JNIEXPORT void JNICALL
-Java_com_asha_yuvblurlib_YuvBlur_nativeBlur(JNIEnv *env, jclass type, jobject y, jobject u,
-                                            jobject v, jint w, jint h, jint radius) {
+Java_com_asha_yuvblurlib_YuvBlur_nativeBlur(JNIEnv *env, jclass type, jobject oy, jobject ou,
+                                            jobject ov, jint w, jint h, jint radius) {
 
-    unsigned char *plane_y = reinterpret_cast<unsigned char *>(env->GetDirectBufferAddress(y));
-    unsigned char* plane_u = reinterpret_cast<unsigned char *>(env->GetDirectBufferAddress(u));
-    unsigned char* plane_v = reinterpret_cast<unsigned char *>(env->GetDirectBufferAddress(v));
-    superFastBlur(plane_y, w, h, radius);
-    superFastBlur(plane_u, w >> 1, h >> 1, radius);
-    superFastBlur(plane_v, w >> 1, h >> 1, radius);
+    if (w * h == 0) {
+        return;
+    }
+
+    unsigned char* plane_y = reinterpret_cast<unsigned char *>(env->GetDirectBufferAddress(oy));
+    unsigned char* plane_u = reinterpret_cast<unsigned char *>(env->GetDirectBufferAddress(ou));
+    unsigned char* plane_v = reinterpret_cast<unsigned char *>(env->GetDirectBufferAddress(ov));
+    int width = w >> 1;
+    int height = h >> 1;
+    unsigned char* plane_y_tmp = new unsigned char[width * height];
+
+    // scale down
+    for (int y = 0; y < height; y++) {
+        for (int x = 0; x < width; x++) {
+            plane_y_tmp[x + width * y] = plane_y[2 * x + w * y * 2];
+        }
+    }
+
+    superFastBlur2(plane_y_tmp, plane_u, plane_v, width, height, radius);
+
+    // scale up
+    for (int y = 0; y < height; y++) {
+        for (int x = 0; x < width; x++) {
+            unsigned char value = plane_y_tmp[x + width * y];
+            int a1 = 2 * x + width * 2 * y * 2;
+            int a2 = 2 * x + 1 + width * 2 * y * 2;
+            int a3 = 2 * x +  width * 2 * (y * 2 + 1);
+            int a4 = 2 * x + 1 + width * 2 * (y * 2 + 1);
+            plane_y[a1] = value;
+            plane_y[a2] = value;
+            plane_y[a3] = value;
+            plane_y[a4] = value;
+        }
+    }
+
+    delete(plane_y_tmp);
 }
 
 extern "C"
 JNIEXPORT jstring JNICALL
 Java_com_asha_yuvblurlib_YuvBlur_nativeVersion(JNIEnv *env, jclass type) {
-    return env->NewStringUTF("0.0.1");
+    return env->NewStringUTF("0.0.2");
 }
